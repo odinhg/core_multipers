@@ -52,6 +52,13 @@ rivet_data += f"--ylabel k\n"
 #rivet_data += f"--yreverse\n\n"
 rivet_data += f"# Data\n"
 
+# TODO (optimizations):
+# - List then join instead of concatenating strings
+# - Add filtration values for all k (don't convert to dictionary)
+# - Use gudhi's alpha complex and filtration values instead of using Miniball for each simplex
+# - Any way to speed up string concatenation? (preallocate memory or use a buffer?)
+# - Use KDTree once for all points, then simply slice the array for each simplex
+
 for simplex, _ in tqdm(delaunay_complex.get_simplices()):
     t2 = time()
     r_mb = math.sqrt(Miniball(X[simplex]).squared_radius()) # Minimal bounding sphere radius for the simplex
