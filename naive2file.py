@@ -12,17 +12,27 @@ from time import time
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
-#n = 500 
-#theta = np.linspace(0, 2 * np.pi, n, endpoint=False)
-#X = np.column_stack((np.cos(theta), np.sin(theta)))# + np.random.normal(0, 0.05, (n, 2))
-#X = np.concatenate((X, np.random.uniform(-1, 1, (n, 2))))
+rivet_data = []
+rivet_data.append("--datatype bifiltration\n")
+rivet_data.append("--xlabel r\n")
+rivet_data.append("--ylabel k\n")
+rivet_data.append("# Data\n")
 
-X = three_annulus(1000, 100)
+# TODO
+
+# Put things in functions
+# Stick to multipers, but allow for exporting bifiltration for use with RIVET
+
+# The main bottleneck is inserting simplices into a SimplexTreeMulti object. Are there any methods to insert multiple simplices at once?
+# Or maybe insert simplices first, and then assign all critical values at once for each simplex?
+
+
+X = three_annulus(1000, 1000)
 
 diameter = Miniball(X).squared_radius() ** 0.5 / 2
 
 t0 = time()
-delaunay_complex = gd.AlphaComplex(points=X).create_simplex_tree(default_filtration_value=True)
+delaunay_complex = gd.AlphaComplex(points=X, precision="safe").create_simplex_tree(default_filtration_value=True)
 t1 = time()
 print(f"Constructing Delaunay complex took {t1 - t0:.2f} s")
 print(f"Number of simplices in the Delaunay complex: {delaunay_complex.num_simplices()}")
@@ -32,70 +42,47 @@ kd_tree = KDTree(X)
 t1 = time()
 print(f"Constructing KDTree took {t1 - t0:.2f} s")
 
-st = mp.SimplexTreeMulti(num_parameters=2, kcritical=True, dtype=np.float32)
-
-k_max = 100
-k_step = 1
-ks = list(range(1, k_max + 1, k_step))
+k_max = 100 
 beta = 1.0
+
+ks = np.linspace(1, k_max, k_max, dtype=int)
 
 t_miniball = 0
 t_knn = 0
-t_max_knn = 0
 t_critical_radii = 0
 t_insert = 0
 
-rivet_data = ""
-rivet_data += f"--datatype bifiltration\n"
-rivet_data += f"--xlabel r\n"
-rivet_data += f"--ylabel k\n"
-#rivet_data += f"--yreverse\n\n"
-rivet_data += f"# Data\n"
-
-# TODO (optimizations):
-# - List then join instead of concatenating strings
-# - Add filtration values for all k (don't convert to dictionary)
-# - Use gudhi's alpha complex and filtration values instead of using Miniball for each simplex
-# - Any way to speed up string concatenation? (preallocate memory or use a buffer?)
-# - Use KDTree once for all points, then simply slice the array for each simplex
+knn_distances = kd_tree.query(X, k=k_max)[0]
 
 for simplex, _ in tqdm(delaunay_complex.get_simplices()):
-    t2 = time()
+    t = time()
     r_mb = math.sqrt(Miniball(X[simplex]).squared_radius()) # Minimal bounding sphere radius for the simplex
-    t_miniball += time() - t2
+    t_miniball += time() - t
 
-    t2 = time()
-    knn_distances, _ = kd_tree.query(X[simplex], k=ks) # Distances to k_max nearest neighbors for each point in the simplex, shape (k_max, simplex_size) 
-    t_knn += time() - t2
+    t = time()
+    max_knn_distances = np.max(knn_distances[simplex], axis=0)
+    t_knn += time() - t
     
-    t2 = time()
-    max_knn_distances = np.max(knn_distances, axis=0) # Maximum distance to k_max nearest neighbors for each k, shape (k_max,)
-    t_max_knn += time() - t2
-    
-    t2 = time()
+    t = time()
     critical_radii = np.maximum(r_mb, beta * max_knn_distances)
-    t_critical_radii += time() - t2
+    t_critical_radii += time() - t
     
-    t2 = time()
-    births = {r: -k for k, r in zip(ks, critical_radii)}.items()
-    #for birth in births:
-    #    st.insert(simplex, np.array(birth))
-    rivet_data += " ".join(map(str, simplex)) + " ; " + " ".join(f"{r:.5f} {k}" for r, k in births) + "\n"
-    t_insert += time() - t2
+    t = time()
+    rivet_data.append(" ".join(map(str, simplex)) + " ; " + " ".join(f"{r:.5f} {-k}" for r, k in zip(critical_radii, ks)) + "\n")
+    t_insert += time() - t
 
 print(f"Miniball computation took {t_miniball:.2f} s")
 print(f"KNN computation took {t_knn:.2f} s")
-print(f"Max KNN computation took {t_max_knn:.2f} s")
 print(f"Critical radii computation took {t_critical_radii:.2f} s")
 print(f"Insertion took {t_insert:.2f} s")
 
-
+rivet_data = "".join(rivet_data)
 with open("rivet_data.txt", "w") as f:
     f.write(rivet_data)
 
-#plt.scatter(*X.T)
-#plt.axis('equal')
+plt.scatter(*X.T)
+plt.axis('equal')
 #plt.show(block=False)
 #pers = mp.module_approximation(st, box=[[0, 0],[diameter, -1]], verbose=True)
 #pers.plot(alpha=0.9)
-#plt.show()
+plt.show()
