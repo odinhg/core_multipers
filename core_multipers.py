@@ -60,8 +60,10 @@ def delaunay_core(X: np.ndarray, k_max: int | None = None, beta: float = 1.0):
             vertex_array[:, i] = simplex
             critical_radii = compute_critical_radii(simplex, X, knn_distances, beta)
             filtrations[i] = np.stack([critical_radii, ks], axis=-1)
-
+        
+        print("Inserting simplices...", end=" ")
         st.insert_batch(vertex_array, filtrations)
+        print("Done.")
 
     return st
 
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     #plt.show()
 
     # Parameters for computing the Delaunay Core Bifiltration
-    k_max = 200 
+    k_max = 100 
     beta = 0.5
 
     # Construct the Delaunay Core Bifiltration
