@@ -77,3 +77,4 @@ if __name__ == "__main__":
     pers.plot(degree=1, alpha=0.9)
 
     plt.show()
+
