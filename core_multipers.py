@@ -27,54 +27,62 @@ def compute_critical_radii(simplex, X, knn_distances, beta):
     max_knn_distances = np.max(knn_distances[simplex], axis=0)
     return np.maximum(r_mb, beta * max_knn_distances)
 
-def compute_filtration_values(X, k_max, beta=1.0):
+def delaunay_core(X: np.ndarray, k_max: int | None = None, beta: float = 1.0):
+    """
+    Build a multi-critical simplex tree storing the Delaunay Core Bifiltration of a point cloud X with k ranging from 1 to k_max and the beta > 0 parameter.
+    """
+
+    if k_max is None:
+        k_max = X.shape[0]
+
+    print(f"Computing the Delaunay Core Bifiltration of {len(X)} points in dimension {X.shape[1]} with k_max={k_max} and beta={beta}.")
+
     st = mp.SimplexTreeMulti(num_parameters=2, kcritical=True, dtype=np.float64)
     delaunay_complex = build_delanauy_complex(X)
     knn_distances = compute_knn_distances(X, k_max)
-
-    filtration_values = {}
-
-    print("Computing critical filtration values for simplices in the Delaunay complex...")
-
-    for simplex, _ in tqdm(delaunay_complex.get_simplices(), total=delaunay_complex.num_simplices()):
-        critical_radii = compute_critical_radii(simplex, X, knn_distances, beta)
-        filtration_values[tuple(simplex)] = critical_radii
-
-    return filtration_values
-
-def build_bifiltration(filtration_values):
-    st = mp.SimplexTreeMulti(num_parameters=2, kcritical=True, dtype=np.float64)
     
-    print("Building the multiparameter simplex tree...")
+    # Group simplices by dimension
+    simplices_in_dimension = {dim: [] for dim in range(delaunay_complex.dimension() + 1)}
+    for simplex, _ in tqdm(delaunay_complex.get_simplices()):
+        simplices_in_dimension[len(simplex) - 1].append(simplex)
 
-    for simplex, critical_radii in tqdm(filtration_values.items()):
-        # Bottleneck: inserting simplices one by one (any other way to do this in multipers?)
-        for k, r in enumerate(critical_radii, 1):
-            st.insert(simplex, (r, -k))
+    ks = (-1) * np.arange(1, k_max + 1) # Opposite ordering
+
+    # Compute birth sets and insert into the simplex tree
+    for dim, simplices in simplices_in_dimension.items():
+        num = len(simplices)
+
+        print(f"Dimension {dim}: {num} simplices -> {num * k_max} minimal birth values.")
+        vertex_array = np.empty((dim + 1, num), dtype=int)
+        filtrations = np.empty((num, k_max, 2), dtype=np.float64)
+
+        for i, simplex in enumerate(tqdm(simplices, total=num)):
+            vertex_array[:, i] = simplex
+            critical_radii = compute_critical_radii(simplex, X, knn_distances, beta)
+            filtrations[i] = np.stack([critical_radii, ks], axis=-1)
+
+        st.insert_batch(vertex_array, filtrations)
 
     return st
-
 
 if __name__ == "__main__":
     from multipers.data import noisy_annulus, three_annulus
     import matplotlib.pyplot as plt
 
-    X = three_annulus(1000, 1000)
+    X = three_annulus(1000, 500)
 
-    plt.scatter(*X.T, s=5, c="black")
-    plt.axis("equal")
-    plt.show()
+    #plt.scatter(*X.T, s=5, c="black")
+    #plt.axis("equal")
+    #plt.show()
 
     # Parameters for computing the Delaunay Core Bifiltration
-    k_max = 150 
-    beta = 1.0
+    k_max = 200 
+    beta = 0.5
 
-    filtration_values = compute_filtration_values(X, k_max, beta)
-    st = build_bifiltration(filtration_values)
+    # Construct the Delaunay Core Bifiltration
+    st = delaunay_core(X, k_max, beta)
 
-    diameter = Miniball(X).squared_radius() ** 0.5
-    pers = mp.module_approximation(st, box=[[0, 0],[diameter / 2, -k_max]], verbose=True)
+    # Compute persistence
+    pers = mp.module_approximation(st, verbose=True)
     pers.plot(degree=1, alpha=0.9)
-
     plt.show()
-
