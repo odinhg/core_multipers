@@ -3,7 +3,6 @@ import gudhi as gd
 import numpy as np
 from tqdm import tqdm
 import multipers as mp
-from miniball import Miniball
 from scipy.spatial import KDTree
 
 def build_delanauy_complex(X, precision="safe"):
@@ -20,7 +19,7 @@ def compute_knn_distances(X, k_max):
 
 def compute_critical_radii(simplex, alpha, knn_distances, beta):
     """
-    Compute the critical radii for a simplex in the Delaunay complex. For each k<=k_max, the critical radius is the maximum of the minimal bounding sphere radius and beta times the maximum distance to the k nearest neighbors in the simplex.
+    Compute the critical radii for a simplex in the Delaunay complex. For each k<=k_max, the critical radius is the maximum of alpha complex filtration value (sqrt) and beta times the maximum distance to the k nearest neighbors in the simplex.
     """
     max_knn_distances = np.max(knn_distances[simplex], axis=0)
     return np.maximum(alpha, beta * max_knn_distances)
